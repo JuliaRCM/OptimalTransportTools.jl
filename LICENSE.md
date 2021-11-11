@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2021 Tobias M. Blickhan, Michael Kraus
+Copyright (c)  The WassersteinDictionaries Authors (see [AUTHORS.md](AUTHORS.md))
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
