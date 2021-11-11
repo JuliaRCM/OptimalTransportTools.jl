@@ -1,0 +1,13 @@
+name = "WassersteinDictionaries"
+uuid = "5b4eb7cd-a529-406e-a3f3-21c9eeb62f96"
+authors = ["Tobias M. Blickhan", "Michael Kraus"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
