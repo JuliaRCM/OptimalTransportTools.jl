@@ -3,6 +3,14 @@ uuid = "5b4eb7cd-a529-406e-a3f3-21c9eeb62f96"
 authors = ["Tobias M. Blickhan", "Michael Kraus"]
 version = "0.1.0"
 
+[deps]
+Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LogExpFunctions = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+SimpleSolvers = "36b790f5-6434-4fbe-b711-1f64a1e2f6a2"
+
 [compat]
 julia = "1"
 
