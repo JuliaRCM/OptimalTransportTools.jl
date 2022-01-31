@@ -1,7 +1,7 @@
 """
 applies a ↦ b = Ka
 """
-@inline function  apply_K_sep!(b::AbstractMatrix, a, k, tmp)
+function  apply_K_sep!(b::AbstractMatrix, a, k, tmp)
     mul!(tmp, k[1], a)       # :t[1] = k[1] * :b
     mul!(b, tmp, k[2])
 end
@@ -14,100 +14,99 @@ applies a ↦ b = Ka
 end
 
 """
-wasserstein_distance_separated(p, β, k, ε, L)
+wasserstein_distance_separated(p, β, a₀, b₀, d₁₀, d₂₀, k, SP, caches)
 p: right marginal as nxn matrix
 β: left marginal as nxn matrix
-C: Cost as dx(nxn) vector of matrices
-ε: entropic regularization parameter
-L: number of Sinkhorn iterations
+k: e^(c/ε) with cost c as dx(nxn) vector of matrices
 
-returns a tupel of entropic Wasserstein distance W and scalings a,b as nxn matrices
+Only differentiable by α
 
 TODO: higher dimensions than d=2, number of grid points different in dimensions/marginals
 """
 
-function sinkhorn_dvg_separated(α::AbstractArray{T}, β::AbstractArray{T₂},
-                                        a₀, b₀, d₁₀, d₂₀,
-                                        k, SP, caches
-                                        ) where {T, T₂}
+function sinkhorn_dvg_separated(α::AbstractArray{T}, β::AbstractArray{V},
+                                a₀, b₀, d₁₀, d₂₀,
+                                k, SP, caches
+                                ) where {T, V}
 
     MC = caches.MC
 
-    MC[:a,T] .= a₀;   MC[:b,T] .= b₀
+    MC[:α,V] .= ForwardDiff.value.(α) 
+
+    MC[:a,V] .= a₀;   MC[:b,V] .= b₀
     if SP.debias
-        MC[:d₁,T] .= d₁₀; MC[:d₂,T] .= d₂₀
+        MC[:d₁,V] .= d₁₀; MC[:d₂,V] .= d₂₀
     end
    
     for l in 1:SP.L
         if SP.averaged_updates
-            apply_K_sep!(MC[:t2,T], MC[:b,T], k, MC[:t1,T])
-            MC[:a₊,T] .= α ./ MC[:t2,T]
-            apply_K_sep!(MC[:t2,T], MC[:a,T], k, MC[:t1,T])
-            MC[:b₊,T] .= β ./ MC[:t2,T]
+            apply_K_sep!(MC[:t2,V], MC[:b,V], k, MC[:t1,V])
+            MC[:a₊,V] .= MC[:α,V] ./ MC[:t2,V]
+            apply_K_sep!(MC[:t2,V], MC[:a,V], k, MC[:t1,V])
+            MC[:b₊,V] .= β ./ MC[:t2,V]
         
-            MC[:b,T] .= sqrt.(MC[:b,T] .* MC[:b₊,T])
-            MC[:a,T] .= sqrt.(MC[:a,T] .* MC[:a₊,T])            
+            MC[:b,V] .= sqrt.(MC[:b,V] .* MC[:b₊,V])
+            MC[:a,V] .= sqrt.(MC[:a,V] .* MC[:a₊,V])            
         else
-            apply_K_sep!(MC[:t2,T], MC[:b,T], k, MC[:t1,T])
-            MC[:a,T] .= α ./ MC[:t2,T]
-            apply_K_sep!(MC[:t2,T], MC[:a,T], k, MC[:t1,T])
-            MC[:b,T] .= β ./ MC[:t2,T]
+            apply_K_sep!(MC[:t2,V], MC[:b,V], k, MC[:t1,V])
+            MC[:a,V] .= MC[:α,V] ./ MC[:t2,V]
+            apply_K_sep!(MC[:t2,V], MC[:a,V], k, MC[:t1,V])
+            MC[:b,V] .= β ./ MC[:t2,V]
         end
 
         if SP.debias #&& ( l%2==0 || l==SP.L )
             if SP.averaged_updates
-                apply_K_sep!(MC[:t2,T], MC[:d₁,T], k, MC[:t1,T])
-                MC[:d₁₊,T] .= sqrt.( MC[:d₁,T] .* α ./ MC[:t2,T] )
-                apply_K_sep!(MC[:t2,T], MC[:d₂,T], k, MC[:t1,T])
-                MC[:d₂₊,T] .= sqrt.( MC[:d₂,T] .* β ./ MC[:t2,T] )
+                apply_K_sep!(MC[:t2,V], MC[:d₁,V], k, MC[:t1,V])
+                MC[:d₁₊,V] .= sqrt.( MC[:d₁,V] .* MC[:α,V] ./ MC[:t2,V] )
+                apply_K_sep!(MC[:t2,V], MC[:d₂,V], k, MC[:t1,V])
+                MC[:d₂₊,V] .= sqrt.( MC[:d₂,V] .* β ./ MC[:t2,V] )
 
-                MC[:d₁,T] .= sqrt.(MC[:d₁,T] .* MC[:d₁₊,T])
-                MC[:d₂,T] .= sqrt.(MC[:d₂,T] .* MC[:d₂₊,T]) 
+                MC[:d₁,V] .= sqrt.(MC[:d₁,V] .* MC[:d₁₊,V])
+                MC[:d₂,V] .= sqrt.(MC[:d₂,V] .* MC[:d₂₊,V]) 
             else
-                apply_K_sep!(MC[:t2,T], MC[:d₁,T], k, MC[:t1,T])
-                MC[:d₁,T] .= sqrt.( MC[:d₁,T] .* α ./ MC[:t2,T] )
-                apply_K_sep!(MC[:t2,T], MC[:d₂,T], k, MC[:t1,T])
-                MC[:d₂,T] .= sqrt.( MC[:d₂,T] .* β ./ MC[:t2,T] )
+                apply_K_sep!(MC[:t2,V], MC[:d₁,V], k, MC[:t1,V])
+                MC[:d₁,V] .= sqrt.( MC[:d₁,V] .* MC[:α,V] ./ MC[:t2,V] )
+                apply_K_sep!(MC[:t2,V], MC[:d₂,V], k, MC[:t1,V])
+                MC[:d₂,V] .= sqrt.( MC[:d₂,V] .* β ./ MC[:t2,V] )
             end
         end
     end
 
     if SP.debias
         for i in eachindex(MC[:t2,T])
-                MC[:t2,T][i] =  α[i] * (_safe_log( ForwardDiff.value( MC[:a,T][i] )) 
-                                        - _safe_log( ForwardDiff.value( MC[:d₁,T][i] ))) +
-                                β[i] * (_safe_log( ForwardDiff.value( MC[:b,T][i] )) 
-                                        - _safe_log( ForwardDiff.value( MC[:d₂,T][i] ))) 
+                MC[:t2,T][i] = α[i] * (_safe_log( MC[:a,V][i] ) - _safe_log( MC[:d₁,V][i] )) +
+                               β[i] * (_safe_log( MC[:b,V][i] ) - _safe_log( MC[:d₂,V][i] ))
         end
     else
         for i in eachindex(MC[:t2,T])
-                MC[:t2,T][i] =  α[i] * _safe_log( ForwardDiff.value( MC[:a,T][i] )) +
-                                β[i] * _safe_log( ForwardDiff.value( MC[:b,T][i] ))
+                MC[:t2,T][i] = α[i] * _safe_log( MC[:a,V][i] ) + β[i] * _safe_log( MC[:b,V][i] )
         end
     end
 
     S_ε = SP.ε * sum( MC[:t2,T] )
 
     if SP.update_potentials
-        a₀ .= ForwardDiff.value.(MC[:a,T]) 
-        b₀ .= ForwardDiff.value.(MC[:b,T])
+        a₀ .= MC[:a,V]
+        b₀ .= MC[:b,V]
         if SP.debias
-            d₁₀ .= ForwardDiff.value.(MC[:d₁,T]) 
-            d₂₀ .= ForwardDiff.value.(MC[:d₂,T])
+            d₁₀ .= MC[:d₁,V]
+            d₂₀ .= MC[:d₂,V]
         end
     end
     
     return S_ε
 end
 
-function sinkhorn_dvg_separated(α::AbstractArray{T}, β::AbstractArray{T₂},
-                                        k, SP, caches
-                                        ) where {T, T₂}
+function sinkhorn_dvg_separated(α::AbstractArray{T}, β::AbstractArray{V},
+                                k, SP, caches
+                                ) where {T, V}
     sinkhorn_dvg_separated( α, β,
-                                    ones(T₂, size(α)), ones(T₂, size(β)),
-                                    ones(T₂, size(α)), ones(T₂, size(β)),
-                                    k, SP, caches)
+                            ones(V, size(α)), ones(V, size(β)),
+                            ones(V, size(α)), ones(V, size(β)),
+                            k, SP, caches
+                            )
 end
+
 
 """
 wasserstein_barycenter_separated!(α, β, k, ε, L)
@@ -126,7 +125,7 @@ TODO: higher dimensions than d=2, number of grid points different in dimensions/
 function sinkhorn_barycenter_separated(  λ::AbstractVector{T}, α::AbstractVector{AT},
                                             b_₀, d₀,
                                             k, SP, caches,
-                                            ) where {T, T₂, AT <: AbstractArray{T₂}}
+                                            ) where {T, V, AT <: AbstractArray{V}}
 
     MC = caches.MC
     VMC = caches.VMC
@@ -207,9 +206,9 @@ end
 
 function sinkhorn_barycenter_separated(  λ::AbstractVector{T}, α::AbstractVector{AT},
                                             k, SP, caches,
-                                            ) where {T, T₂, AT <: AbstractArray{T₂}}
+                                            ) where {T, V, AT <: AbstractArray{V}}
     sinkhorn_barycenter_separated(   λ, α,
-                                        [ones(T₂, size(α[s])) for s in eachindex(α)], 
-                                        ones(T₂, size(α[1])),
+                                        [ones(V, size(α[s])) for s in eachindex(α)], 
+                                        ones(V, size(α[1])),
                                         k, SP, caches)
 end

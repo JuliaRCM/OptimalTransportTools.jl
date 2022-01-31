@@ -19,112 +19,109 @@ function sinkhorn_step_logsep!(u::AbstractArray{T}, v, c, εinv, log_α, tempv, 
 end
 
 """
-wasserstein_distance_logseparated(p, q, c, ε, L)
-p: right marginal as nxn matrix
-q: left marginal as nxn matrix
-c: Cost as dx(nxn) vector of matrices
-ε: entropic regularization parameter
-L: number of Sinkhorn iterations
+wasserstein_distance_logseparated(log_α, log_β, u₀, v₀, log_d₁₀, log_d₂₀, c, SP, caches)
+log_α: right marginal weights as nxn matrix in log-scale
+log_β: left marginal weights as nxn matrix in log-scale
+c: Cost between grid points as dx(nxn) vector of matrices
 
-returns a tupel of entropic Wasserstein distance W and scalings a,b as nxn matrices
+Only differentiable by log_α
 
 TODO: higher dimensions than d=2, number of grid points different in dimensions/marginals
 """
 
-function sinkhorn_dvg_logseparated( log_α::AbstractArray{T}, log_β::AbstractArray{T₂}, 
-                                            u₀, v₀, log_d₁₀, log_d₂₀,
-                                            c, SP, caches,
-                                            ) where {T, T₂}
+function sinkhorn_dvg_logseparated( log_α::AbstractArray{T}, log_β::AbstractArray{V}, 
+                                    u₀, v₀, log_d₁₀, log_d₂₀,
+                                    c, SP, caches,
+                                    ) where {T, V}
 
     MC = caches.MC
     VC = caches.VC
     εinv = 1/SP.ε
 
-    MC[:u,T] .= u₀;   MC[:v,T] .= v₀
+    MC[:log_α,V] .= ForwardDiff.value.(log_α) # Value of input weights to speed up the iterations
+
+    MC[:u,V] .= u₀;   MC[:v,V] .= v₀
     if SP.debias
-        MC[:log_d₁,T] .= log_d₁₀; MC[:log_d₂,T] .= log_d₂₀
+        MC[:log_d₁,V] .= log_d₁₀; MC[:log_d₂,V] .= log_d₂₀
     end
     
     for l in 1:SP.L
         if SP.averaged_updates
-            sinkhorn_step_logsep!(MC[:u₊,T], MC[:v,T], c, εinv, log_α, VC[:t1,T], MC[:t1,T]) # u = log.(p./Kb)
-            sinkhorn_step_logsep!(MC[:v₊,T], MC[:u,T], c, εinv, log_β, VC[:t1,T], MC[:t1,T]) # v = log.(q./Ka) assuming K = Kᵀ
+            sinkhorn_step_logsep!(MC[:u₊,V], MC[:v,V], c, εinv, MC[:log_α,V], VC[:t1,V], MC[:t1,V]) # u = log.(p./Kb)
+            sinkhorn_step_logsep!(MC[:v₊,V], MC[:u,V], c, εinv, log_β, VC[:t1,V], MC[:t1,V]) # v = log.(q./Ka) assuming K = Kᵀ
             
-            MC[:u,T] .= 0.5 * (MC[:u₊,T] + MC[:u,T])
-            MC[:v,T] .= 0.5 * (MC[:v₊,T] + MC[:v,T])
+            MC[:u,V] .= 0.5 * (MC[:u₊,V] + MC[:u,V])
+            MC[:v,V] .= 0.5 * (MC[:v₊,V] + MC[:v,V])
         else
-            sinkhorn_step_logsep!(MC[:u,T], MC[:v,T], c, εinv, log_α, VC[:t1,T], MC[:t1,T]) # u = log.(p./Kb)
-            sinkhorn_step_logsep!(MC[:v,T], MC[:u,T], c, εinv, log_β, VC[:t1,T], MC[:t1,T]) # v = log.(q./Ka) assuming K = Kᵀ
+            sinkhorn_step_logsep!(MC[:u,V], MC[:v,V], c, εinv, MC[:log_α,V], VC[:t1,V], MC[:t1,V]) # u = log.(p./Kb)
+            sinkhorn_step_logsep!(MC[:v,V], MC[:u,V], c, εinv, log_β, VC[:t1,V], MC[:t1,V]) # v = log.(q./Ka) assuming K = Kᵀ
         end
 
         if SP.debias # && (l%2==0 || l==SP.L)
             if SP.averaged_updates
-                MC[:t3,T] .= MC[:log_d₁,T]
-                MC[:t2,T] .= MC[:log_d₁,T] .+ log_α
-                sinkhorn_step_logsep!(MC[:log_d₁₊,T], MC[:t3,T], c, εinv, 
-                                        MC[:t2,T], VC[:t1,T], MC[:t1,T]) .*= 0.5
+                MC[:t3,V] .= MC[:log_d₁,V]
+                MC[:t2,V] .= MC[:log_d₁,V] .+ MC[:log_α,V] 
+                sinkhorn_step_logsep!(MC[:log_d₁₊,V], MC[:t3,V], c, εinv, 
+                                        MC[:t2,V], VC[:t1,V], MC[:t1,V]) .*= 0.5
 
-                MC[:t3,T] .= MC[:log_d₂,T] 
-                MC[:t2,T] .= MC[:log_d₂,T] .+ log_β
-                sinkhorn_step_logsep!(MC[:log_d₂₊,T], MC[:t3,T], c, εinv, 
-                                    MC[:t2,T], VC[:t1,T], MC[:t1,T]) .*= 0.5
+                MC[:t3,V] .= MC[:log_d₂,V] 
+                MC[:t2,V] .= MC[:log_d₂,V] .+ log_β
+                sinkhorn_step_logsep!(MC[:log_d₂₊,V], MC[:t3,V], c, εinv, 
+                                    MC[:t2,V], VC[:t1,V], MC[:t1,V]) .*= 0.5
 
-                MC[:log_d₂,T] .= 0.5 * (MC[:log_d₂₊,T] + MC[:log_d₂,T])
-                MC[:log_d₁,T] .= 0.5 * (MC[:log_d₁₊,T] + MC[:log_d₁,T])
+                MC[:log_d₂,V] .= 0.5 * (MC[:log_d₂₊,V] + MC[:log_d₂,V])
+                MC[:log_d₁,V] .= 0.5 * (MC[:log_d₁₊,V] + MC[:log_d₁,V])
             else
-                MC[:t3,T] .= MC[:log_d₁,T]
-                MC[:t2,T] .= MC[:log_d₁,T] .+ log_α
-                sinkhorn_step_logsep!(MC[:log_d₁,T], MC[:t3,T], c, εinv, 
-                                        MC[:t2,T], VC[:t1,T], MC[:t1,T]) .*= 0.5
+                MC[:t3,V] .= MC[:log_d₁,V]
+                MC[:t2,V] .= MC[:log_d₁,V] .+ MC[:log_α,V] 
+                sinkhorn_step_logsep!(MC[:log_d₁,V], MC[:t3,V], c, εinv, 
+                                        MC[:t2,V], VC[:t1,V], MC[:t1,V]) .*= 0.5
 
-                MC[:t3,T] .= MC[:log_d₂,T] 
-                MC[:t2,T] .= MC[:log_d₂,T] .+ log_β
-                sinkhorn_step_logsep!(MC[:log_d₂,T], MC[:t3,T], c, εinv, 
-                                    MC[:t2,T], VC[:t1,T], MC[:t1,T]) .*= 0.5
+                MC[:t3,V] .= MC[:log_d₂,V] 
+                MC[:t2,V] .= MC[:log_d₂,V] .+ log_β
+                sinkhorn_step_logsep!(MC[:log_d₂,V], MC[:t3,V], c, εinv, 
+                                    MC[:t2,V], VC[:t1,V], MC[:t1,V]) .*= 0.5
             end
         end
     end
 
     if SP.debias
         for i in eachindex(MC[:t2,T])
-            MC[:t2,T][i] =  exp(log_α[i]) * (ForwardDiff.value( MC[:u,T][i] ) -
-                                             ForwardDiff.value( MC[:log_d₁,T][i] )) +
-                            exp(log_β[i]) * (ForwardDiff.value( MC[:v,T][i] ) - 
-                                             ForwardDiff.value( MC[:log_d₂,T][i] ))
+            MC[:t2,T][i] =  exp(log_α[i]) * ( MC[:u,V][i] - MC[:log_d₁,V][i] ) +
+                            exp(log_β[i]) * ( MC[:v,T][i] - MC[:log_d₂,T][i] )
         end
     else
         for i in eachindex(MC[:t2,T])
-            MC[:t2,T][i] =  exp(log_α[i]) * ForwardDiff.value(MC[:u,T][i]) +
-                            exp(log_β[i]) * ForwardDiff.value(MC[:v,T][i])
+            MC[:t2,T][i] =  exp(log_α[i]) * MC[:u,V][i] + exp(log_β[i]) * MC[:v,V][i]
         end
     end
     S_ε = SP.ε * sum( MC[:t2,T] )
 
     if SP.update_potentials
-        u₀ .= ForwardDiff.value.(MC[:u,T]) 
-        v₀ .= ForwardDiff.value.(MC[:v,T])
+        u₀ .= MC[:u,V]
+        v₀ .= MC[:v,V]
         if SP.debias
-            log_d₁₀ .= ForwardDiff.value.(MC[:log_d₁,T]) 
-            log_d₂₀ .= ForwardDiff.value.(MC[:log_d₂,T])
+            log_d₁₀ .= MC[:log_d₁,V] 
+            log_d₂₀ .= MC[:log_d₂,V]
         end
     end
 
     return S_ε
 end
 
-function sinkhorn_dvg_logseparated( log_α::AbstractArray{T}, log_β::AbstractArray{T₂},     
+function sinkhorn_dvg_logseparated( log_α::AbstractArray{T}, log_β::AbstractArray{V},     
                                             c, SP, caches,
-                                            ) where {T, T₂}
+                                            ) where {T, V}
             sinkhorn_dvg_logseparated(  log_α, log_β,
-                                        zeros(T₂, size(log_α)), zeros(T₂, size(log_β)),
-                                        zeros(T₂, size(log_α)), zeros(T₂, size(log_β)),
+                                        zeros(V, size(log_α)), zeros(V, size(log_β)),
+                                        zeros(V, size(log_α)), zeros(V, size(log_β)),
                                         c, SP, caches)
 end
 
 function sinkhorn_barycenter_logseparated(λ::AbstractVector{T}, log_α::AbstractVector{AT},
                                             v₀, log_d₀,
                                             c, SP, caches,
-                                            ) where {T, T₂, AT <: AbstractArray{T₂}}
+                                            ) where {T, V, AT <: AbstractArray{V}}
 
     MC = caches.MC
     VC = caches.VC
@@ -189,7 +186,7 @@ function sinkhorn_barycenter_logseparated(λ::AbstractVector{T}, log_α::Abstrac
             VMC[:v,T][s] .= MC[:log_μ,T] .- VMC[:log_φ,T][s]
         end
 
-        if SP.debias && ( l%2==0 || l==SP.L )
+        if SP.debias #&& ( l%2==0 || l==SP.L )
             MC[:t3,T] .= MC[:log_d,T] 
             MC[:t2,T] .= MC[:log_d,T] .+ MC[:log_μ,T] 
             sinkhorn_step_logsep!(MC[:log_d,T], MC[:t3,T], c, εinv, MC[:t2,T], VC[:t1,T], MC[:t1,T]) .*= 0.5
@@ -198,21 +195,21 @@ function sinkhorn_barycenter_logseparated(λ::AbstractVector{T}, log_α::Abstrac
 
     if SP.update_potentials
         for s in 1:VMC.S
-            v₀[s] .= VMC[:v,T][s]
+            v₀[s] .= ForwardDiff.value.( VMC[:v,T][s] )
         end
         if SP.debias
-            log_d₀ .= ForwardDiff.value.(MC[:log_d,T])
+            log_d₀ .= ForwardDiff.value.( MC[:log_d,T] )
         end
     end
 
-    return MC[:log_μ,T]
+    return copy(MC[:log_μ,T])
 end
 
 function sinkhorn_barycenter_logseparated(λ::AbstractVector{T}, log_α::AbstractVector{AT},
                                             c, SP, caches,
-                                            ) where {T, T₂, AT <: AbstractArray{T₂}}
+                                            ) where {T, V, AT <: AbstractArray{V}}
     sinkhorn_barycenter_logseparated(λ, log_α,
-                                        [zeros(T₂, size(log_α[s])) for s in eachindex(log_α)],
-                                        zeros(T₂, size(log_α[1])),
+                                        [zeros(V, size(log_α[s])) for s in eachindex(log_α)],
+                                        zeros(V, size(log_α[1])),
                                         c, SP, caches)
 end

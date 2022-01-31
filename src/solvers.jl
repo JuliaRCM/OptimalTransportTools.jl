@@ -1,38 +1,17 @@
-function mysolve!(x, s::QuasiNewtonOptimizer, callback!; n::Int = 0)
-   
-    SimpleSolvers.setInitialConditions!(s, x)
+function mysolve!(x, s::Optimizer, callback)
+    SimpleSolvers.initialize!(s, x)
 
-    local nmax::Int = n > 0 ? nmax = n : s.params.nmax
+    while !SimpleSolvers.meets_stopping_criteria(SimpleSolvers.status(s), SimpleSolvers.config(s))
+        SimpleSolvers.next_iteration!(SimpleSolvers.status(s))
+        SimpleSolvers.solver_step!(s)
+        # residual!(status(s))
 
-    s.status.i = 0
-    if s.status.rgₐ ≥ s.params.atol² || n > 0 || s.params.nmin > 0
-        for s.status.i = 1:nmax
-            
-            # update status and temporaries
-            SimpleSolvers.update!(s.status)
-
-            # apply line search
-            SimpleSolvers._linesearch!(s)
-
-            # update warmstart potentials
-            callback!(s.status.x, s.F)
-
-            # compute Gradient at new solution
-            SimpleSolvers.gradient(s)(s.status.g, s.status.x)
-
-            # compute residual
-            SimpleSolvers.residual!(s.status)
-
-            # check for convergence
-            if SimpleSolvers.check_solver_converged(s.status, s.params) && s.status.i ≥ s.params.nmin && !(n > 0)
-                if s.params.nwarn > 0 && s.status.i ≥ s.params.nwarn
-                    println("WARNING: Quasi-Newton Optimizer took ", s.status.i, " iterations.")
-                end
-                break
-            end
-
-            # update Hessian
-            SimpleSolvers.update!(s.H, s.status)
-        end
+        callback( SimpleSolvers.solution(SimpleSolvers.status(s)) )
     end
+
+    SimpleSolvers.warn_iteration_number(SimpleSolvers.status(s), SimpleSolvers.config(s))
+
+    copyto!(x, SimpleSolvers.solution(SimpleSolvers.status(s)))
+
+    return x
 end

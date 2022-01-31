@@ -114,5 +114,5 @@ struct LazyCost{T,V,FT} <: AbstractMatrix{T}
     end
 end
   
-Base.getindex(C::LazyCost{T}, i, j) where T = @views C.c(C.x[i,:], C.y[j,:])::T
+Base.getindex(C::LazyCost{T,V}, i, j) where {T,V} = @views C.c(C.x[i,:], C.y[j,:])::promote_type(T,V)
 Base.size(C::LazyCost) = (size(C.x,1), size(C.y,1))

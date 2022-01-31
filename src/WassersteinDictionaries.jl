@@ -26,7 +26,7 @@ export sinkhorn_dvg_logseparated, sinkhorn_barycenter_logseparated
 include("sinkhorn_separated.jl")
 export sinkhorn_dvg_separated, sinkhorn_barycenter_separated
 
-#include("solvers.jl")
-#export mysolve!
+include("solvers.jl")
+export mysolve!
 
 end
