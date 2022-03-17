@@ -8,10 +8,10 @@ returns cost matrix C in separated form as a dx(nxn) vector of matrices
 
 TODO: non-cube-domains, different n along every dimension
 """
-function get_cost_matrix_separated(n, d; T=Float64, a=0, b=1)
-    x₁ = range(a,b,length=n)
-    c = [zeros(T,n,n) for _ in 1:d]
+function get_cost_matrix_separated(n, d; a=zeros(d), b=ones(d))
+    c = [zeros(n,n) for _ in 1:d]
     for k in 1:d
+        x₁ = range(a[k],b[k],length=n)
         for i in 1:n
             for j in 1:n
                 c[k][i,j] = sqeuclidean(x₁[i],x₁[j])
@@ -21,30 +21,29 @@ function get_cost_matrix_separated(n, d; T=Float64, a=0, b=1)
     return c
 end
 
-function get_cost_matrix_separated_periodic(n, d)
-    x₁ = range(0,1,length=n)
+function get_cost_matrix_separated_periodic(n, d; a=zeros(d), b=ones(d))
     c = [zeros(n,n) for _ in 1:d]
     for k in 1:d
+        x₁ = range(a[k],b[k],length=n)
         for i in 1:n
             for j in 1:n
-                c[k][i,j] = minimum([sqeuclidean(x₁[i],x₁[j]), sqeuclidean(x₁[i]+1,x₁[j]), 
-                                    sqeuclidean(x₁[i],x₁[j]+1), sqeuclidean(x₁[i]-1,x₁[j]),
-                                    sqeuclidean(x₁[i],x₁[j]-1)])
+                c[k][i,j] = minimum([sqeuclidean(x₁[i],x₁[j]), sqeuclidean(x₁[i]+b[k]-a[k],x₁[j]), 
+                                        sqeuclidean(x₁[i]-b[k]+a[k],x₁[j])] )
             end
         end
     end
     return c
 end
 
-function get_cost_matrix_separated_halfperiodic(n,d)
-    x₁ = range(0,1,length=n)
+function get_cost_matrix_separated_halfperiodic(n, d; a=zeros(d), b=ones(d))
     c = [zeros(n,n) for _ in 1:2]
     for k in 1:2
+        x₁ = range(a[k],b[k],length=n)
         for i in 1:n
             for j in 1:n
                 if k == 1
-                    c[k][i,j] = minimum([sqeuclidean(x₁[i],x₁[j]), sqeuclidean(x₁[i]+1,x₁[j]), 
-                                        sqeuclidean(x₁[i]-1,x₁[j])] )
+                    c[k][i,j] = minimum([sqeuclidean(x₁[i],x₁[j]), sqeuclidean(x₁[i]+b[k]-a[k],x₁[j]), 
+                                        sqeuclidean(x₁[i]-b[k]+a[k],x₁[j])] )
                 else
                     c[k][i,j] = sqeuclidean(x₁[i],x₁[j])
                 end

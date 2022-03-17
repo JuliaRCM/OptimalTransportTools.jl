@@ -1,17 +1,15 @@
-function mysolve!(x, s::Optimizer, callback)
-    SimpleSolvers.initialize!(s, x)
+function solve_callback!(x, opt::SS.Optimizer, callback)
+    SS.initialize!(opt, x) 
 
-    while !SimpleSolvers.meets_stopping_criteria(SimpleSolvers.status(s), SimpleSolvers.config(s))
-        SimpleSolvers.next_iteration!(SimpleSolvers.status(s))
-        SimpleSolvers.solver_step!(s)
-        # residual!(status(s))
+    while !SS.meets_stopping_criteria(opt)
+        SS.next_iteration!(result(opt))
+        SS.solver_step!(x, state(opt))
+        SS.update!(opt, x)
 
-        callback( SimpleSolvers.solution(SimpleSolvers.status(s)) )
+        callback(opt)
     end
 
-    SimpleSolvers.warn_iteration_number(SimpleSolvers.status(s), SimpleSolvers.config(s))
-
-    copyto!(x, SimpleSolvers.solution(SimpleSolvers.status(s)))
+    SS.warn_iteration_number(status(opt), config(opt))
 
     return x
 end

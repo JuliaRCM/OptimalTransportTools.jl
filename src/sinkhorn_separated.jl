@@ -3,7 +3,7 @@ applies a ↦ b = Ka
 """
 function  apply_K_sep!(b::AbstractMatrix, a, k, tmp)
     mul!(tmp, k[1], a)       # :t[1] = k[1] * :b
-    mul!(b, tmp, k[2])
+    mul!(b, tmp, k[2]')
 end
 
 """

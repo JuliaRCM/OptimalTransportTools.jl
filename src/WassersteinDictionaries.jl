@@ -3,7 +3,7 @@ module WassersteinDictionaries
 using ForwardDiff
 using LinearAlgebra
 using Distances
-using SimpleSolvers
+import SimpleSolvers as SS
 using LogExpFunctions
 
 using Printf
@@ -17,6 +17,9 @@ export LazyCost
 include("utilities.jl")
 export SinkhornParameters
 
+include("sinkhorn.jl")
+export sinkhorn_dvg, sinkhorn_barycenter
+
 include("sinkhorn_lagrangian.jl")
 export sinkhorn_dvg_particles
 
@@ -25,8 +28,5 @@ export sinkhorn_dvg_logseparated, sinkhorn_barycenter_logseparated
 
 include("sinkhorn_separated.jl")
 export sinkhorn_dvg_separated, sinkhorn_barycenter_separated
-
-include("solvers.jl")
-export mysolve!
 
 end

@@ -86,5 +86,14 @@ function sinkhorn_dvg_particles(    x::AbstractMatrix{T},
         end
     end
 
+    if SP.update_potentials
+        u₀ .= VC[:u,V]
+        v₀ .= VC[:v,V]
+        if SP.debias
+            log_d₁₀ .= VC[:log_d₁,V] 
+            log_d₂₀ .= VC[:log_d₂,V]
+        end
+    end
+
     return S_ε
 end
