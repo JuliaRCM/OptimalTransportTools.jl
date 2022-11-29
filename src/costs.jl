@@ -14,7 +14,19 @@ function get_cost_matrix_separated(n, d; a=zeros(d), b=ones(d))
         x₁ = range(a[k],b[k],length=n)
         for i in 1:n
             for j in 1:n
-                c[k][i,j] = sqeuclidean(x₁[i],x₁[j])
+                c[k][i,j] = 0.5 * sqeuclidean(x₁[i],x₁[j])
+            end
+        end
+    end
+    return c
+end
+
+function get_cost_matrix_separated(x, y, d)
+    c = [zeros( length(x[k]),length(y[k])) for k in 1:d]
+    for k in 1:d
+        for i in eachindex(x[k])
+            for j in eachindex(y[k])
+                c[k][i,j] = 0.5 * sqeuclidean(x[k][i],y[k][j])
             end
         end
     end
@@ -27,8 +39,8 @@ function get_cost_matrix_separated_periodic(n, d; a=zeros(d), b=ones(d))
         x₁ = range(a[k],b[k],length=n)
         for i in 1:n
             for j in 1:n
-                c[k][i,j] = minimum([sqeuclidean(x₁[i],x₁[j]), sqeuclidean(x₁[i]+b[k]-a[k],x₁[j]), 
-                                        sqeuclidean(x₁[i]-b[k]+a[k],x₁[j])] )
+                c[k][i,j] = 0.5 * minimum([sqeuclidean(x₁[i],x₁[j]), sqeuclidean(x₁[i]+b[k]-a[k],x₁[j]),
+                            sqeuclidean(x₁[i]-b[k]+a[k],x₁[j])] )
             end
         end
     end
@@ -42,10 +54,9 @@ function get_cost_matrix_separated_halfperiodic(n, d; a=zeros(d), b=ones(d))
         for i in 1:n
             for j in 1:n
                 if k == 1
-                    c[k][i,j] = minimum([sqeuclidean(x₁[i],x₁[j]), sqeuclidean(x₁[i]+b[k]-a[k],x₁[j]), 
-                                        sqeuclidean(x₁[i]-b[k]+a[k],x₁[j])] )
+                    c[k][i,j] = 0.5 * minimum([sqeuclidean(x₁[i],x₁[j]), sqeuclidean(x₁[i]+b[k]-a[k],x₁[j]), sqeuclidean(x₁[i]-b[k]+a[k],x₁[j])] )
                 else
-                    c[k][i,j] = sqeuclidean(x₁[i],x₁[j])
+                    c[k][i,j] = 0.5 * sqeuclidean(x₁[i],x₁[j])
                 end
             end
         end
@@ -103,15 +114,17 @@ function get_gibbs_matrix(C::AbstractMatrix, ε)
 end
 
 
-struct LazyCost{T,V,FT} <: AbstractMatrix{T}
-    x::Matrix{T}
-    y::Matrix{V}
+struct LazyCost{T,N,XT,YT,FT} <: AbstractMatrix{T}
+    x::Array{XT,N} # N × d
+    y::Array{YT,N}
     c::FT
 
-    function LazyCost(x::Matrix{T}, y::Matrix{V}, c::FT = (x,y) -> sqeuclidean(x,y) ) where {T, V, FT <: Base.Callable}
-        new{T,V,FT}(x,y,c)
+    function LazyCost(x::Array{XT,N}, y::Array{YT,N}, c::FT = (x,y) -> 0.5 * sqeuclidean(x,y) ) where {XT, YT, N, FT <: Base.Callable}
+        t = c(x[begin], y[begin])
+        new{typeof(t),N,XT,YT,FT}(x,y,c)
     end
 end
-  
-Base.getindex(C::LazyCost{T,V}, i, j) where {T,V} = @views C.c(C.x[i,:], C.y[j,:])::promote_type(T,V)
+
+Base.getindex(C::LazyCost{T,1}, i, j) where {T} = C.c(C.x[i], C.y[j])::T
+Base.getindex(C::LazyCost{T,N}, i, j) where {T,N} = @views C.c(C.x[i,:], C.y[j,:])::T
 Base.size(C::LazyCost) = (size(C.x,1), size(C.y,1))

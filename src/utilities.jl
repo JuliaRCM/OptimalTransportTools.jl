@@ -1,6 +1,7 @@
 mutable struct SinkhornParameters
     L::Int
     ε::Real
+    tol::Real
 
     averaged_updates::Bool
     debias::Bool
@@ -8,8 +9,8 @@ mutable struct SinkhornParameters
     update_potentials::Bool
 end
 
-SinkhornParameters(L) = SinkhornParameters(L, 5e-3, false, true, false)
-SinkhornParameters(L, ε) = SinkhornParameters(L, ε, false, true, false)
+SinkhornParameters(L::Int) = SinkhornParameters(L, 5e-3, 0, false, true, false)
+SinkhornParameters(L, ε) = SinkhornParameters(L, ε, 0, false, true, false)
 
 function _safe_log!(log_x, x)
     for i in eachindex(x)

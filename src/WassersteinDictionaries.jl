@@ -24,9 +24,9 @@ include("sinkhorn_lagrangian.jl")
 export sinkhorn_dvg_particles
 
 include("sinkhorn_logseparated.jl")
-export sinkhorn_dvg_logseparated, sinkhorn_barycenter_logseparated
+export sinkhorn_dvg_logseparated, sinkhorn_barycenter_logseparated, sinkhorn_dvg_logsep, sinkhorn_barycenter_logsep
 
 include("sinkhorn_separated.jl")
-export sinkhorn_dvg_separated, sinkhorn_barycenter_separated
+export sinkhorn_dvg_separated, sinkhorn_barycenter_separated, sinkhorn_dvg_sep, sinkhorn_barycenter_sep
 
 end
