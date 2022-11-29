@@ -3,9 +3,10 @@ module WassersteinDictionaries
 using ForwardDiff
 using LinearAlgebra
 using Distances
-import SimpleSolvers as SS
 using LogExpFunctions
 using Base.Threads
+
+import SimpleSolvers as SS
 
 using Printf
 
