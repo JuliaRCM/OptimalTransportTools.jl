@@ -70,18 +70,22 @@ SP.update_potentials = false
     SP.debias = false
     SP.averaged_updates = false
     @test abs(sinkhorn_dvg_sep(α[1], α[2], k, SP, caches) - 0.49) / 0.49 < 2 * ε
+    @test abs(sinkhorn_dvg_logsep(log_α[1], log_α[2], c, SP, caches) - 0.49) / 0.49 < 2 * ε
     @test sinkhorn_dvg_logsep(log_α[1], log_α[2], c, SP, caches) ≈ sinkhorn_dvg_sep(α[1], α[2], k, SP, caches) atol = 1e-12
 
     SP.averaged_updates = true
     @test abs(sinkhorn_dvg_sep(α[1], α[2], k, SP, caches) - 0.49) / 0.49 < 2 * ε
+    @test abs(sinkhorn_dvg_logsep(log_α[1], log_α[2], c, SP, caches) - 0.49) / 0.49 < 2 * ε
     @test sinkhorn_dvg_logsep(log_α[1], log_α[2], c, SP, caches) ≈ sinkhorn_dvg_sep(α[1], α[2], k, SP, caches) atol = 1e-12
 
     SP.debias = true
     @test abs(sinkhorn_dvg_sep(α[1], α[2], k, SP, caches) - 0.49) / 0.49 < 2 * ε^2
+    @test abs(sinkhorn_dvg_logsep(log_α[1], log_α[2], c, SP, caches) - 0.49) / 0.49 < 2 * ε^2
     @test sinkhorn_dvg_logsep(log_α[1], log_α[2], c, SP, caches) ≈ sinkhorn_dvg_sep(α[1], α[2], k, SP, caches) atol = 1e-12
 
     SP.averaged_updates = false
     @test abs(sinkhorn_dvg_sep(α[1], α[2], k, SP, caches) - 0.49) / 0.49 < 2 * ε^2
+    @test abs(sinkhorn_dvg_logsep(log_α[1], log_α[2], c, SP, caches) - 0.49) / 0.49 < 2 * ε^2
     @test sinkhorn_dvg_logsep(log_α[1], log_α[2], c, SP, caches) ≈ sinkhorn_dvg_sep(α[1], α[2], k, SP, caches) atol = 1e-12
 end
 
@@ -94,6 +98,7 @@ end
     log_μ₀ = sinkhorn_barycenter_logsep(λ₀, log_α, c, SPB, caches)
 
     @test norm(μ₀ - μ₀ₑ,1) / norm(μ₀ₑ,1) < 1e-3
+    @test norm(exp.(log_μ₀) - μ₀ₑ,1) / norm(μ₀ₑ,1) < 1e-3
     @test norm(μ₀ - exp.(log_μ₀),1) / norm(μ₀,1) < 1e-9
 
     SPB.averaged_updates = true
@@ -102,6 +107,7 @@ end
     log_μ₀ = sinkhorn_barycenter_logsep(λ₀, log_α, c, SPB, caches)
 
     @test norm(μ₀ - μ₀ₑ,1) / norm(μ₀ₑ,1) < 1e-3
+    @test norm(exp.(log_μ₀) - μ₀ₑ,1) / norm(μ₀ₑ,1) < 1e-3
     @test norm(μ₀ - exp.(log_μ₀),1) / norm(μ₀,1) < 1e-5 # symmetric updates do not perform as well as wished
 
 end
