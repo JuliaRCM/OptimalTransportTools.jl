@@ -142,7 +142,7 @@ function sinkhorn_barycenter_logsep(λ::AbstractVector{T}, log_α::AbstractVecto
     ε = SP.ε
 
     for s in 1:VMC.S
-        VMC[:f,T][s] .= f₀[s]
+        VMC[:f,T,s] .= f₀[s]
     end
     if SP.debias
         MC[:h,T] .= h₀
@@ -153,18 +153,18 @@ function sinkhorn_barycenter_logsep(λ::AbstractVector{T}, log_α::AbstractVecto
 
         # g[k] = SoftMin_α[k] [ C - f[k] ]
         for s in 1:MC.S
-            softmin_separated!(VMC[:g,T][s], VMC[:f,T][s], log_α[s], ε, c, VC[:t1,T], MC[:t1,T])
+            softmin_separated!(VMC[:g,T,s], VMC[:f,T,s], log_α[s], ε, c, VC[:t1,T], MC[:t1,T])
         end
 
         # log μ = h / ε - ∑ₖ λ[k] g[k] / ε (h == 0 for no debiasing)
         SP.debias ? MC[:log_μ,T] .= MC[:h,T] ./ ε : MC[:log_μ,T] .= 0
         for s in 1:MC.S
-            MC[:log_μ,T] .-= λ[s] .* VMC[:g,T][s] ./ ε
+            MC[:log_μ,T] .-= λ[s] .* VMC[:g,T,s] ./ ε
         end
 
         # f[k] = SoftMin_μ [ C - g[k] ]
         for s in 1:MC.S
-            softmin_separated!(VMC[:f,T][s], VMC[:g,T][s], MC[:log_μ,T], ε, c, VC[:t1,T], MC[:t1,T])
+            softmin_separated!(VMC[:f,T,s], VMC[:g,T,s], MC[:log_μ,T], ε, c, VC[:t1,T], MC[:t1,T])
         end
 
         # Debiasing
@@ -180,8 +180,8 @@ function sinkhorn_barycenter_logsep(λ::AbstractVector{T}, log_α::AbstractVecto
             # updated aₖ last, so check for marginal violation on bₖ:
             for s in 1:VMC.S
 
-                softmin_separated!(MC[:t2,T], VMC[:f,T][s], log_α[s], ε, c, VC[:t1,T], MC[:t1,T])
-                MC[:t3,T] .= exp.( MC[:log_μ,T] ) .* ( exp.( (VMC[:g,T][s] .- MC[:t2,T]) ./ ε) .- one(T) )  # this is π'1 - μ
+                softmin_separated!(MC[:t2,T], VMC[:f,T,s], log_α[s], ε, c, VC[:t1,T], MC[:t1,T])
+                MC[:t3,T] .= exp.( MC[:log_μ,T] ) .* ( exp.( (VMC[:g,T,s] .- MC[:t2,T]) ./ ε) .- one(T) )  # this is π'1 - μ
 
                 sum_norm += norm( ForwardDiff.value.(MC[:t3,T]) , 1)
             end
@@ -197,7 +197,7 @@ function sinkhorn_barycenter_logsep(λ::AbstractVector{T}, log_α::AbstractVecto
 
         if SP.update_potentials
             for s in 1:VMC.S
-                f₀[s] .= ForwardDiff.value.( VMC[:f,T][s] )
+                f₀[s] .= ForwardDiff.value.( VMC[:f,T,s] )
             end
             if SP.debias
                 h₀ .= ForwardDiff.value.( MC[:h,T] )
@@ -363,7 +363,7 @@ function sinkhorn_barycenter_logseparated(λ::AbstractVector{T}, log_α::Abstrac
     εinv = 1/SP.ε
 
     for s in 1:VMC.S
-        VMC[:v,T][s] .= v₀[s]
+        VMC[:v,T,s] .= v₀[s]
     end
     if SP.debias
         MC[:log_d,T] .= log_d₀
@@ -372,7 +372,7 @@ function sinkhorn_barycenter_logseparated(λ::AbstractVector{T}, log_α::Abstrac
     #=
     if SP.update_warmstart
         for s in 1:VMC.S
-            VMC[:vL,T][s] .= VMC[:v,T][s]
+            VMC[:vL,T,s] .= VMC[:v,T,s]
         end
         if SP.debias
             MC[:log_dL,T] .= MC[:log_d,T]
@@ -382,14 +382,14 @@ function sinkhorn_barycenter_logseparated(λ::AbstractVector{T}, log_α::Abstrac
 
     if SP.warmstart == "ones"
         for s in 1:VMC.S
-            VMC[:v,T][s] .= 0
+            VMC[:v,T,s] .= 0
         end
         if SP.debias
             MC[:log_d,T] .= 0
         end
     elseif SP.warmstart == "last_update"
         for s in 1:VMC.S
-            VMC[:v,T][s] .= VMC[:vL,T][s]
+            VMC[:v,T,s] .= VMC[:vL,T,s]
         end
         if SP.debias
             VMC[:log_d,T] .= VMC[:log_dL,T] 
@@ -406,18 +406,18 @@ function sinkhorn_barycenter_logseparated(λ::AbstractVector{T}, log_α::Abstrac
         MC[:t3,T] .= 0
 
        for s in 1:VMC.S
-            sinkhorn_step_logsep!(MC[:t2,T], VMC[:v,T][s], c, εinv, log_α[s], VC[:t1,T], MC[:t1,T])   # this is uˡₛ
-            sinkhorn_step_logsep!(VMC[:log_φ,T][s], MC[:t2,T], c, εinv, MC[:t3,T], VC[:t1,T], MC[:t1,T]) .*= -1   # log φˡₛ = log Kᵀ aˡₛ
+            sinkhorn_step_logsep!(MC[:t2,T], VMC[:v,T,s], c, εinv, log_α[s], VC[:t1,T], MC[:t1,T])   # this is uˡₛ
+            sinkhorn_step_logsep!(VMC[:log_φ,T,s], MC[:t2,T], c, εinv, MC[:t3,T], VC[:t1,T], MC[:t1,T]) .*= -1   # log φˡₛ = log Kᵀ aˡₛ
         end
 
         SP.debias ? MC[:log_μ,T] .= MC[:log_d,T] : MC[:log_μ,T] .= 0
         
         for s in 1:MC.S
-            MC[:log_μ,T] .+= λ[s] .* VMC[:log_φ,T][s]
+            MC[:log_μ,T] .+= λ[s] .* VMC[:log_φ,T,s]
         end
       
         for s in 1:MC.S
-            VMC[:v,T][s] .= MC[:log_μ,T] .- VMC[:log_φ,T][s]
+            VMC[:v,T,s] .= MC[:log_μ,T] .- VMC[:log_φ,T,s]
         end
 
         if SP.debias #&& ( l%2==0 || l==SP.L )
@@ -429,7 +429,7 @@ function sinkhorn_barycenter_logseparated(λ::AbstractVector{T}, log_α::Abstrac
 
     if SP.update_potentials
         for s in 1:VMC.S
-            v₀[s] .= ForwardDiff.value.( VMC[:v,T][s] )
+            v₀[s] .= ForwardDiff.value.( VMC[:v,T,s] )
         end
         if SP.debias
             log_d₀ .= ForwardDiff.value.( MC[:log_d,T] )
