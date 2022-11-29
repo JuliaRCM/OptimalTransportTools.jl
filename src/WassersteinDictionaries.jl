@@ -5,6 +5,7 @@ using LinearAlgebra
 using Distances
 import SimpleSolvers as SS
 using LogExpFunctions
+using Base.Threads
 
 using Printf
 

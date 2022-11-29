@@ -57,9 +57,9 @@ log_α = [ log.(α[s]) for s in 1:S ];
 ε = 5e-3
 k = WassersteinDictionaries.get_gibbs_matrix(c, ε)
 
-caches = ( MC = MatrixCache(S,n), VMC = MatrixCache(S,n), VC = VectorCache(S,n) )
 SP = SinkhornParameters(128, ε)
 SPB = SinkhornParameters(256, ε)
+caches = ( MC = MatrixCache(n), VC = VectorCache(n) )
 
 SP.tol = 1e-9 * h₁ * h₂
 SPB.tol = 1e-9 * h₁ * h₂

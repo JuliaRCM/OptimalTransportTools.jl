@@ -1,10 +1,9 @@
 struct CacheDict{T <: Array, N}
-    S::Int
     n::Int
     caches::Dict{UInt64, Array}
     
-    function CacheDict{T,N}(S,n) where {T,N}
-        new{T,N}(S, n, Dict{UInt64, Array}())
+    function CacheDict{T,N}(n) where {T,N}
+        new{T,N}(n, Dict{UInt64, Array}())
     end
 end
 

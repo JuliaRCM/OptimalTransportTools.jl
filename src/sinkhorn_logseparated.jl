@@ -41,9 +41,11 @@ function sinkhorn_dvg_logsep( log_α::AbstractArray{T}, log_β::AbstractArray{V}
     MC[:log_α,V] .= ForwardDiff.value.(log_α) 
     MC[:log_β,V] .= log_β
 
-    MC[:f,V] .= f₀;   MC[:g,V] .= g₀
+    MC[:f,V] .= f₀
+    MC[:g,V] .= g₀
     if SP.debias
-        MC[:hα,V] .= hα₀; MC[:hβ,V] .= hβ₀
+        MC[:hα,V] .= hα₀
+        MC[:hβ,V] .= hβ₀
     end
     
     for l in 1:SP.L
@@ -138,11 +140,12 @@ function sinkhorn_barycenter_logsep(λ::AbstractVector{T}, log_α::AbstractVecto
 
     MC = caches.MC
     VC = caches.VC
-    VMC = caches.VMC
+    S = length(λ)
     ε = SP.ε
+    log_μ = zeros(T, MC.n, MC.n)
 
-    for s in 1:VMC.S
-        VMC[:f,T,s] .= f₀[s]
+    for s in 1:S
+        MC[:f,T,s] .= f₀[s]
     end
     if SP.debias
         MC[:h,T] .= h₀
@@ -152,43 +155,43 @@ function sinkhorn_barycenter_logsep(λ::AbstractVector{T}, log_α::AbstractVecto
     for l in 1:SP.L # Sinkhorn loop
 
         # g[k] = SoftMin_α[k] [ C - f[k] ]
-        for s in 1:MC.S
-            softmin_separated!(VMC[:g,T,s], VMC[:f,T,s], log_α[s], ε, c, VC[:t1,T], MC[:t1,T])
+        @threads for s in 1:S
+            softmin_separated!(MC[:g,T,s], MC[:f,T,s], log_α[s], ε, c, VC[:t1,T], MC[:t1,T])
         end
 
         # log μ = h / ε - ∑ₖ λ[k] g[k] / ε (h == 0 for no debiasing)
-        SP.debias ? MC[:log_μ,T] .= MC[:h,T] ./ ε : MC[:log_μ,T] .= 0
-        for s in 1:MC.S
-            MC[:log_μ,T] .-= λ[s] .* VMC[:g,T,s] ./ ε
+        SP.debias ? log_μ .= MC[:h,T] ./ ε : log_μ .= 0
+        for s in 1:S
+            log_μ .-= λ[s] .* MC[:g,T,s] ./ ε
         end
 
         # f[k] = SoftMin_μ [ C - g[k] ]
-        for s in 1:MC.S
-            softmin_separated!(VMC[:f,T,s], VMC[:g,T,s], MC[:log_μ,T], ε, c, VC[:t1,T], MC[:t1,T])
+        @threads for s in 1:S
+            softmin_separated!(MC[:f,T,s], MC[:g,T,s], log_μ, ε, c, VC[:t1,T], MC[:t1,T])
         end
 
         # Debiasing
         if SP.debias
             # h = 0.5 * h + 0.5 * ε * log(μ) + 0.5 * SoftMin_μ [ Cxx - h ]
             softmin_separated!(MC[:h₊,T], MC[:h,T], MC[:zero,T], ε, c, VC[:t1,T], MC[:t1,T])
-            MC[:h,T] .= 0.5 .* ( MC[:h₊,T] .+ MC[:h,T] .+ ε .* MC[:log_μ,T])
+            MC[:h,T] .= 0.5 .* ( MC[:h₊,T] .+ MC[:h,T] .+ ε .* log_μ)
         end
 
         # Check for convergence every 4 iterations
         if l % 4 == 0
             sum_norm = zero(V)
             # updated aₖ last, so check for marginal violation on bₖ:
-            for s in 1:VMC.S
+            for s in 1:S
 
-                softmin_separated!(MC[:t2,T], VMC[:f,T,s], log_α[s], ε, c, VC[:t1,T], MC[:t1,T])
-                MC[:t3,T] .= exp.( MC[:log_μ,T] ) .* ( exp.( (VMC[:g,T,s] .- MC[:t2,T]) ./ ε) .- one(T) )  # this is π'1 - μ
+                softmin_separated!(MC[:t2,T], MC[:f,T,s], log_α[s], ε, c, VC[:t1,T], MC[:t1,T])
+                MC[:t3,T] .= exp.( log_μ ) .* ( exp.( (MC[:g,T,s] .- MC[:t2,T]) ./ ε) .- one(T) )  # this is π'1 - μ
 
                 sum_norm += norm( ForwardDiff.value.(MC[:t3,T]) , 1)
             end
 
-            # println("norm in iteration $l: $(sum_norm/MC.S)")
+            # println("norm in iteration $l: $(sum_norm/S)")
 
-            if sum_norm < SP.tol * MC.S
+            if sum_norm < SP.tol * S
                 break # Sinkhorn loop
             end
         end
@@ -196,15 +199,15 @@ function sinkhorn_barycenter_logsep(λ::AbstractVector{T}, log_α::AbstractVecto
     end # Sinkhorn loop
 
         if SP.update_potentials
-            for s in 1:VMC.S
-                f₀[s] .= ForwardDiff.value.( VMC[:f,T,s] )
+            for s in 1:S
+                f₀[s] .= ForwardDiff.value.( MC[:f,T,s] )
             end
             if SP.debias
                 h₀ .= ForwardDiff.value.( MC[:h,T] )
             end
         end
 
-    return copy(MC[:log_μ,T])
+    return log_μ
 end
 
 

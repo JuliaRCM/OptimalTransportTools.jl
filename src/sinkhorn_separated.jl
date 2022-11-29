@@ -130,38 +130,44 @@ function sinkhorn_dvg_sep(α::AbstractArray{T}, β::AbstractArray{V},
 end
 
 
-function sinkhorn_loop(λ::AbstractVector{T}, α, k, SP, MC, VMC) where {T}
+function sinkhorn_loop!(μ, λ::AbstractVector{T}, α, k, SP, MC) where {T}
+    S = length(λ)
+
     # g[k] = SoftMin_α[k] [ C - f[k] ]
     # bₖ = 1 ⊘ K ★ (aₖ ⊙ αₖ)   
-    for s in 1:VMC.S
-        MC[:αa,T] .= VMC[:a,T,s] .* α[s]
+    @threads for s in 1:S
+        MC[:αa,T] .= MC[:a,T,s] .* α[s]
         apply_K_sep!(MC[:t2,T], MC[:αa,T], k, MC[:t1,T])
 
         if SP.averaged_updates
-            VMC[:invb₊,T,s] .= MC[:t2,T]
+            MC[:invb₊,T,s] .= MC[:t2,T]
         else
-            VMC[:b,T,s] .= one(T) ./ MC[:t2,T]
+            MC[:b,T,s] .= one(T) ./ MC[:t2,T]
         end
     end
 
     # log μ = h / ε - ∑ₖ λ[k] g[k] / ε (h == 0 for no debiasing)
     # μ = d ⊘ ∏ₖ b[k] ^ λ[k]
-    MC[:μ,T] .= SP.debias ? MC[:d,T] : one(T)
-    for s in 1:MC.S
-        MC[:μ,T] .*= VMC[:b,T,s] .^ (-λ[s])
+    if SP.debias
+        μ .= MC[:d,T] 
+    else
+        μ .= one(T)
+    end
+    for s in 1:S
+        μ .*= MC[:b,T,s] .^ (-λ[s])
     end
 
     # f[k] = SoftMin_μ [ C - g[k] ]
     # aₖ =  1 ⊘ K ★ (bₖ ⊙ μ)
-    for s in 1:MC.S
-        MC[:μb,T] .= VMC[:b,T,s] .* MC[:μ,T]
+    @threads for s in 1:S
+        MC[:μb,T] .= MC[:b,T,s] .* μ
         apply_K_sep!(MC[:t2,T], MC[:μb,T], k, MC[:t1,T])    # this is 1 ⊘ a₊
         
         if SP.averaged_updates
-            VMC[:a,T,s] .= sqrt.(VMC[:a,T,s] ./ MC[:t2,T])
-            VMC[:b,T,s] .= sqrt.(VMC[:b,T,s] ./ VMC[:invb₊,T,s])
+            MC[:a,T,s] .= sqrt.(MC[:a,T,s] ./ MC[:t2,T])
+            MC[:b,T,s] .= sqrt.(MC[:b,T,s] ./ MC[:invb₊,T,s])
         else
-            VMC[:a,T,s] .= one(T) ./ MC[:t2,T]
+            MC[:a,T,s] .= one(T) ./ MC[:t2,T]
         end
     end
 
@@ -169,7 +175,7 @@ function sinkhorn_loop(λ::AbstractVector{T}, α, k, SP, MC, VMC) where {T}
     if SP.debias
 
         apply_K_sep!(MC[:t2,T], MC[:d,T], k, MC[:t1,T])
-        MC[:d,T] .= sqrt.( MC[:d,T] .* MC[:μ,T] ./ MC[:t2,T] )
+        MC[:d,T] .= sqrt.( MC[:d,T] .* μ ./ MC[:t2,T] )
 
     end
 end
@@ -181,13 +187,14 @@ function sinkhorn_barycenter_sep(λ::AbstractVector{T}, α::AbstractVector{AT},
                                 ) where {T, V, AT <: AbstractArray{V}}
 
     MC = caches.MC
-    VMC = caches.VMC
+    S = length(λ)
+    μ = zeros(T, MC.n, MC.n)
 
     # d = exp h / ε
 
-    for s in 1:VMC.S
-        VMC[:a,T,s] .= a_₀[s]
-        VMC[:b,T,s] .= one(T)
+    for s in 1:S
+        MC[:a,T,s] .= a_₀[s]
+        MC[:b,T,s] .= one(T)
     end
     if SP.debias
         MC[:d,T] .= d₀
@@ -195,24 +202,24 @@ function sinkhorn_barycenter_sep(λ::AbstractVector{T}, α::AbstractVector{AT},
 
     # Sinkhorn loop
     for l in 1:SP.L
-        sinkhorn_loop(λ, α, k, SP, MC, VMC)
+        sinkhorn_loop!(μ, λ, α, k, SP, MC)
 
         # Check for convergence every 4 iterations
         if l % 4 == 0
             sum_norm = zero(V)
             # updated aₖ last, so check for marginal violation on bₖ:
-            for s in 1:VMC.S
-                MC[:αa,T] .= VMC[:a,T,s] .* α[s]
+            for s in 1:S
+                MC[:αa,T] .= MC[:a,T,s] .* α[s]
                 apply_K_sep!(MC[:t2,T], MC[:αa,T], k, MC[:t1,T])
-                MC[:t2,T] .*= VMC[:b,T,s] .* MC[:μ,T]
-                MC[:t2,T] .-= MC[:μ,T]
+                MC[:t2,T] .*= MC[:b,T,s] .* μ
+                MC[:t2,T] .-= μ
 
                 sum_norm += norm( ForwardDiff.value.(MC[:t2,T]) , 1)
             end
 
-            # println("norm in iteration $l: $(sum_norm/MC.S)")
+            # println("norm in iteration $l: $(sum_norm/S)")
 
-            if sum_norm < SP.tol * MC.S
+            if sum_norm < SP.tol * S
                 break # Sinkhorn loop
             end
         end
@@ -220,8 +227,8 @@ function sinkhorn_barycenter_sep(λ::AbstractVector{T}, α::AbstractVector{AT},
 
     if SP.update_potentials
 
-        for s in 1:VMC.S
-            a_₀[s] .= ForwardDiff.value.(VMC[:a,T,s])
+        for s in 1:S
+            a_₀[s] .= ForwardDiff.value.(MC[:a,T,s])
         end
 
         if SP.debias
@@ -229,7 +236,7 @@ function sinkhorn_barycenter_sep(λ::AbstractVector{T}, α::AbstractVector{AT},
         end
     end
 
-    return copy(MC[:μ,T])
+    return μ
 end
 
 function sinkhorn_barycenter_sep(  λ::AbstractVector{T}, α::AbstractVector{AT},
