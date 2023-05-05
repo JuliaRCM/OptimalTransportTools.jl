@@ -3,16 +3,16 @@
 This maps (f, c, log_α) ↦ g = - ε log.(∑ₓ α .* exp ε⁻¹ ( f - C(.,y) ))
 """
 function softmin_separated!(f::AbstractArray{T}, g, log_α, ε, c, tempv, tempm) where T
-    for i₁ in eachindex(tempv), j₂ in eachindex(tempv)     # sum over j₁
-        tempv .= -1/ε .* @view c[1][i₁,:]
-        tempv .+= 1/ε .* @view g[:,j₂]     # using c = cᵀ
-        tempv .+= @view log_α[:,j₂] 
-        tempm[i₁,j₂] = logsumexp(tempv)
+    for i₁ in axes(tempm,1), j₂ in axes(tempm,2)  # sum over j₁
+        @views tempv[1,:] .= -1/ε .* c[1][i₁,:]
+        @views tempv[1,:] .+= 1/ε .* g[:,j₂]     # using c = cᵀ
+        @views tempv[1,:] .+= log_α[:,j₂]
+        @views tempm[i₁,j₂] = logsumexp(tempv[1,:])
     end
-    for i₁ in eachindex(tempv), i₂ in eachindex(tempv)     # sum over j₂
-        tempv .= -1/ε .* @view c[2][i₂,:]
-        tempv .+= @view tempm[i₁,:]
-        f[i₁,i₂] = - ε * logsumexp(tempv)
+    for i₁ in axes(f,1), i₂ in axes(f,2)   # sum over j₂
+        @views tempv[1,:] .= -1/ε .* c[2][i₂,:]
+        @views tempv[1,:] .+= tempm[i₁,:]
+        @views f[i₁,i₂] = - ε * logsumexp(tempv[1,:])
     end
 end
 
@@ -30,16 +30,17 @@ TODO:   higher dimensions than d=2, number of grid points different in dimension
 
 function sinkhorn_dvg_logsep( log_α::AbstractArray{T}, log_β::AbstractArray{V}, 
                                 f₀, g₀, hα₀, hβ₀,
-                                c, SP, caches,
+                                c, SP, MC,
                                 ) where {T, V}
-
-    MC = caches.MC
-    VC = caches.VC
     ε = SP.ε
 
     # Use the value of input weights to speed up the iterations - envelope theorem
     MC[:log_α,V] .= ForwardDiff.value.(log_α) 
     MC[:log_β,V] .= log_β
+
+    # for convergence tests
+    MC[:α,V] .= exp.(log_α) 
+    MC[:β,V] .= exp.(log_β)
 
     MC[:f,V] .= f₀
     MC[:g,V] .= g₀
@@ -50,41 +51,45 @@ function sinkhorn_dvg_logsep( log_α::AbstractArray{T}, log_β::AbstractArray{V}
     
     for l in 1:SP.L
 
+        # for relative convergence check
+        MC[:f₋,V] .= MC[:f,V]
+
         if SP.averaged_updates
             # f = 0.5 * f + 0.5 * SoftMin_β [ Cyx - g ]
-            softmin_separated!(MC[:f₊,V], MC[:g,V] , MC[:log_β,V], ε, c, VC[:t1,V], MC[:t1,V])
+            softmin_separated!(MC[:f₊,V], MC[:g,V] , MC[:log_β,V], ε, c, MC[:t1,V], MC[:t2,V])
             # g = 0.5 * g + 0.5 * SoftMin_α [ Cxy - f ]
-            softmin_separated!(MC[:g₊,V], MC[:f,V] , MC[:log_α,V], ε, c, VC[:t1,V], MC[:t1,V])
+            softmin_separated!(MC[:g₊,V], MC[:f,V] , MC[:log_α,V], ε, c, MC[:t1,V], MC[:t2,V])
             MC[:f,V] .= 0.5 .* (MC[:f₊,V] .+ MC[:f,V])
             MC[:g,V] .= 0.5 .* (MC[:g₊,V] .+ MC[:g,V])
         else
-            softmin_separated!(MC[:f,V], MC[:g,V] , MC[:log_β,V], ε, c, VC[:t1,V], MC[:t1,V])
-            softmin_separated!(MC[:g,V], MC[:f,V] , MC[:log_α,V], ε, c, VC[:t1,V], MC[:t1,V])
+            softmin_separated!(MC[:f,V], MC[:g,V] , MC[:log_β,V], ε, c, MC[:t1,V], MC[:t2,V])
+            softmin_separated!(MC[:g,V], MC[:f,V] , MC[:log_α,V], ε, c, MC[:t1,V], MC[:t2,V])
         end
 
         # Debiasing
         if SP.debias
 
             # hα = 0.5 * hα + 0.5 * SoftMin_α [ Cxx - hα ]
-            softmin_separated!(MC[:hα₊,V], MC[:hα,V], MC[:log_α,V], ε, c, VC[:t1,V], MC[:t1,V])
+            softmin_separated!(MC[:hα₊,V], MC[:hα,V], MC[:log_α,V], ε, c, MC[:t1,V], MC[:t2,V])
             MC[:hα,V] .= 0.5 .* (MC[:hα₊,V] .+ MC[:hα,V])
 
             # hβ = 0.5 * hβ + 0.5 * SoftMin_β [ Cyy - hβ ]
-            softmin_separated!(MC[:hβ₊,V], MC[:hβ,V], MC[:log_β,V], ε, c, VC[:t1,V], MC[:t1,V])
+            softmin_separated!(MC[:hβ₊,V], MC[:hβ,V], MC[:log_β,V], ε, c, MC[:t1,V], MC[:t2,V])
             MC[:hβ,V] .= 0.5 .* (MC[:hβ₊,V] .+ MC[:hβ,V])
 
         end
 
-        # Check for convergence every 4 iterations
+        # Check for convergence every _ iterations
         if l % 4 == 0
-            # updated b = exp f/ε last, so check for marginal violation on a = exp f/ε:
+            # updated b = exp g/ε last, so check for marginal violation on a = exp f/ε:
+            softmin_separated!(MC[:f₊,V], MC[:g,V] , MC[:log_β,V], ε, c, MC[:t1,V], MC[:t2,V])
+            @. MC[:t1,V] = MC[:α,V] * ( exp( (MC[:f,V] - MC[:f₊,V]) / ε) - one(V) )  # this is π1 - α
 
-            softmin_separated!(MC[:t2,V], MC[:g,V] , MC[:log_β,V], ε, c, VC[:t1,V], MC[:t1,V])
-            MC[:t3,V] .= exp.( MC[:log_α,V] ) .* ( exp.( (MC[:f,V] .- MC[:t2,V]) ./ ε) .- one(V) )  # this is π1 - α
+            # check relative difference
+            #@. MC[:t1,V] = (MC[:f₋,V] - MC[:f,V]) * MC[:α,V]
+            #@. MC[:t2,V] = MC[:f₋,V] * MC[:α,V]    # normalize
 
-            # println("norm in iteration $l: $(norm( MC[:t3,V] , 1))")
-
-            if norm( MC[:t3,V] , 1) < SP.tol
+            if norm( MC[:t1,V], 1) < SP.tol
                 break # Sinkhorn loop
             end
         end
@@ -122,12 +127,16 @@ end
 Convenience function for no given initial potentials
 """
 function sinkhorn_dvg_logsep( log_α::AbstractArray{T}, log_β::AbstractArray{V},     
-                                    c, SP, caches,
+                                    c, SP, MC,
                                     ) where {T, V}
-    sinkhorn_dvg_logsep(  log_α, log_β,
-                                zeros(V, size(log_α)), zeros(V, size(log_β)),
-                                zeros(V, size(log_α)), zeros(V, size(log_β)),
-                                c, SP, caches)
+    MC[:f,V] .= zero(V)
+    MC[:g,V] .= zero(V)
+    MC[:hα,V] .= zero(V)
+    MC[:hβ,V] .= zero(V)
+    sinkhorn_dvg_logsep(    log_α, log_β,
+                            MC[:f,V], MC[:g,V],
+                            MC[:hα,V], MC[:hβ,V],
+                            c, SP, MC)
 end
 
 """
@@ -135,11 +144,9 @@ end
 """
 function sinkhorn_barycenter_logsep(λ::AbstractVector{T}, log_α::AbstractVector{AT},
                                     f₀, h₀,
-                                    c, SP, caches,
+                                    c, SP, MC,
                                     ) where {T, V, AT <: AbstractArray{V}}
 
-    MC = caches.MC
-    VC = caches.VC
     S = length(λ)
     ε = SP.ε
     log_μ = zeros(T, MC.n, MC.n)
@@ -154,9 +161,18 @@ function sinkhorn_barycenter_logsep(λ::AbstractVector{T}, log_α::AbstractVecto
 
     for l in 1:SP.L # Sinkhorn loop
 
+        # for convergence check
+        for s in 1:S
+            MC[:g₋,T,s] .= MC[:g,T,s]
+        end
+
         # g[k] = SoftMin_α[k] [ C - f[k] ]
         @threads for s in 1:S
-            softmin_separated!(MC[:g,T,s], MC[:f,T,s], log_α[s], ε, c, VC[:t1,T], MC[:t1,T])
+            if SP.averaged_updates
+                softmin_separated!(MC[:g₊,T,s], MC[:f,T,s], log_α[s], ε, c, MC[:t1,T], MC[:t2,T])
+            else
+                softmin_separated!(MC[:g,T,s], MC[:f,T,s], log_α[s], ε, c, MC[:t1,T], MC[:t2,T])
+            end
         end
 
         # log μ = h / ε - ∑ₖ λ[k] g[k] / ε (h == 0 for no debiasing)
@@ -167,13 +183,19 @@ function sinkhorn_barycenter_logsep(λ::AbstractVector{T}, log_α::AbstractVecto
 
         # f[k] = SoftMin_μ [ C - g[k] ]
         @threads for s in 1:S
-            softmin_separated!(MC[:f,T,s], MC[:g,T,s], log_μ, ε, c, VC[:t1,T], MC[:t1,T])
+            if SP.averaged_updates
+                softmin_separated!(MC[:f₊,T,s], MC[:g,T,s], log_μ, ε, c, MC[:t1,T], MC[:t2,T])
+                MC[:f,T,s] .= 0.5 .* (MC[:f₊,T,s] .+ MC[:f,T,s])
+                MC[:g,T,s] .= 0.5 .* (MC[:g₊,T,s] .+ MC[:g,T,s])
+            else
+                softmin_separated!(MC[:f,T,s], MC[:g,T,s], log_μ, ε, c, MC[:t1,T], MC[:t2,T])
+            end
         end
 
         # Debiasing
         if SP.debias
             # h = 0.5 * h + 0.5 * ε * log(μ) + 0.5 * SoftMin_μ [ Cxx - h ]
-            softmin_separated!(MC[:h₊,T], MC[:h,T], MC[:zero,T], ε, c, VC[:t1,T], MC[:t1,T])
+            softmin_separated!(MC[:h₊,T], MC[:h,T], MC[:zero,T], ε, c, MC[:t1,T], MC[:t2,T])
             MC[:h,T] .= 0.5 .* ( MC[:h₊,T] .+ MC[:h,T] .+ ε .* log_μ)
         end
 
@@ -182,12 +204,19 @@ function sinkhorn_barycenter_logsep(λ::AbstractVector{T}, log_α::AbstractVecto
             sum_norm = zero(V)
             # updated aₖ last, so check for marginal violation on bₖ:
             for s in 1:S
+                softmin_separated!(MC[:g₊,T], MC[:f,T,s], log_α[s], ε, c, MC[:t1,T], MC[:t2,T])
+                MC[:t1,T] .= exp.( log_μ ) .* ( exp.( (MC[:g,T,s] .- MC[:g₊,T]) ./ ε) .- one(T) )  # this is π'1 - μ
 
-                softmin_separated!(MC[:t2,T], MC[:f,T,s], log_α[s], ε, c, VC[:t1,T], MC[:t1,T])
-                MC[:t3,T] .= exp.( log_μ ) .* ( exp.( (MC[:g,T,s] .- MC[:t2,T]) ./ ε) .- one(T) )  # this is π'1 - μ
-
-                sum_norm += norm( ForwardDiff.value.(MC[:t3,T]) , 1)
+                MC[:t1,V] .= ForwardDiff.value.(MC[:t1,T])
+                sum_norm += norm(MC[:t1,V], 1)
             end
+
+            # check for relative difference
+            #for s in 1:S
+            #    @. MC[:t1,T] = (MC[:g,T,s] - MC[:g₋,T,s]) * exp( log_μ )
+            #    @. MC[:t2,T] = MC[:g₋,T,s] * exp( log_μ )   # normalize
+            #    sum_norm += norm( ForwardDiff.value.(MC[:t1,T]), 1) / norm( ForwardDiff.value.(MC[:t2,T]), 1)
+            #end
 
             # println("norm in iteration $l: $(sum_norm/S)")
 
@@ -212,10 +241,14 @@ end
 
 
 function sinkhorn_barycenter_logsep(λ::AbstractVector{T}, log_α::AbstractVector{AT},
-                                        c, SP, caches,
+                                        c, SP, MC,
                                         ) where {T, V, AT <: AbstractArray{V}}
+    for s in eachindex(log_α)
+        MC[:f,T,s] .= zero(T)
+    end
+    MC[:h,T] .= zero(T) 
     sinkhorn_barycenter_logsep(λ, log_α,
-                                [zeros(V, size(log_α[s])) for s in eachindex(log_α)],
-                                zeros(V, size(log_α[1])),
-                                c, SP, caches)
+                                [MC[:f,T,s] for s in eachindex(log_α)],
+                                MC[:h,T],
+                                c, SP, MC)
 end

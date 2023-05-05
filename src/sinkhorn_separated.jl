@@ -27,10 +27,8 @@ TODO: higher dimensions than d=2, number of grid points different in dimensions/
 
 function sinkhorn_dvg_sep(α::AbstractArray{T}, β::AbstractArray{V},
                             a₀, b₀, dα₀, dβ₀,
-                            k, SP, caches
+                            k, SP, MC
                             ) where {T, V}
-
-    MC = caches.MC
 
     MC[:α,V] .= ForwardDiff.value.(α) 
     MC[:β,V] .= β
@@ -120,17 +118,21 @@ function sinkhorn_dvg_sep(α::AbstractArray{T}, β::AbstractArray{V},
 end
 
 function sinkhorn_dvg_sep(α::AbstractArray{T}, β::AbstractArray{V},
-                        k, SP, caches
+                        k, SP, MC
                         ) where {T, V}
+    MC[:a,V] .= one(V)
+    MC[:b,V] .= one(V)
+    MC[:dα,V] .= one(V)
+    MC[:dβ,V] .= one(V)
     sinkhorn_dvg_sep( α, β,
-                            ones(V, size(α)), ones(V, size(β)),
-                            ones(V, size(α)), ones(V, size(β)),
-                            k, SP, caches
-                            )
+                        MC[:a,V], MC[:b,V],
+                        MC[:dα,V], MC[:dβ,V],
+                        k, SP, MC
+                        )
 end
 
 
-function sinkhorn_loop!(μ, λ::AbstractVector{T}, α, k, SP, MC) where {T}
+function sinkhorn_barycenter_loop!(μ, λ::AbstractVector{T}, α, k, SP, MC) where {T}
     S = length(λ)
 
     # g[k] = SoftMin_α[k] [ C - f[k] ]
@@ -140,7 +142,7 @@ function sinkhorn_loop!(μ, λ::AbstractVector{T}, α, k, SP, MC) where {T}
         apply_K_sep!(MC[:t2,T], MC[:αa,T], k, MC[:t1,T])
 
         if SP.averaged_updates
-            MC[:invb₊,T,s] .= MC[:t2,T]
+            MC[:b₊,T,s] .= one(T) ./ MC[:t2,T]
         else
             MC[:b,T,s] .= one(T) ./ MC[:t2,T]
         end
@@ -148,11 +150,7 @@ function sinkhorn_loop!(μ, λ::AbstractVector{T}, α, k, SP, MC) where {T}
 
     # log μ = h / ε - ∑ₖ λ[k] g[k] / ε (h == 0 for no debiasing)
     # μ = d ⊘ ∏ₖ b[k] ^ λ[k]
-    if SP.debias
-        μ .= MC[:d,T] 
-    else
-        μ .= one(T)
-    end
+    SP.debias ? μ .= MC[:d,T] : μ .= one(T)
     for s in 1:S
         μ .*= MC[:b,T,s] .^ (-λ[s])
     end
@@ -165,7 +163,7 @@ function sinkhorn_loop!(μ, λ::AbstractVector{T}, α, k, SP, MC) where {T}
         
         if SP.averaged_updates
             MC[:a,T,s] .= sqrt.(MC[:a,T,s] ./ MC[:t2,T])
-            MC[:b,T,s] .= sqrt.(MC[:b,T,s] ./ MC[:invb₊,T,s])
+            MC[:b,T,s] .= sqrt.(MC[:b,T,s] .* MC[:b₊,T,s])
         else
             MC[:a,T,s] .= one(T) ./ MC[:t2,T]
         end
@@ -183,10 +181,9 @@ end
 
 function sinkhorn_barycenter_sep(λ::AbstractVector{T}, α::AbstractVector{AT},
                                 a_₀, d₀,
-                                k, SP, caches,
+                                k, SP, MC
                                 ) where {T, V, AT <: AbstractArray{V}}
 
-    MC = caches.MC
     S = length(λ)
     μ = zeros(T, MC.n, MC.n)
 
@@ -202,7 +199,7 @@ function sinkhorn_barycenter_sep(λ::AbstractVector{T}, α::AbstractVector{AT},
 
     # Sinkhorn loop
     for l in 1:SP.L
-        sinkhorn_loop!(μ, λ, α, k, SP, MC)
+        sinkhorn_barycenter_loop!(μ, λ, α, k, SP, MC)
 
         # Check for convergence every 4 iterations
         if l % 4 == 0
@@ -214,7 +211,8 @@ function sinkhorn_barycenter_sep(λ::AbstractVector{T}, α::AbstractVector{AT},
                 MC[:t2,T] .*= MC[:b,T,s] .* μ
                 MC[:t2,T] .-= μ
 
-                sum_norm += norm( ForwardDiff.value.(MC[:t2,T]) , 1)
+                MC[:t2,V] .= ForwardDiff.value.(MC[:t2,T])
+                sum_norm += norm(MC[:t2,V], 1)
             end
 
             # println("norm in iteration $l: $(sum_norm/S)")
@@ -240,10 +238,14 @@ function sinkhorn_barycenter_sep(λ::AbstractVector{T}, α::AbstractVector{AT},
 end
 
 function sinkhorn_barycenter_sep(  λ::AbstractVector{T}, α::AbstractVector{AT},
-                                            k, SP, caches,
+                                            k, SP, MC
                                             ) where {T, V, AT <: AbstractArray{V}}
+    for s in eachindex(α)
+        MC[:a,T,s] .= one(T)
+    end
+    MC[:d,T] .= one(T) 
     sinkhorn_barycenter_sep( λ, α,
-                            [ones(V, size(α[s])) for s in eachindex(α)], 
-                            ones(V, size(α[1])),
-                            k, SP, caches)
+                            [MC[:a,T,s] for s in eachindex(α)], 
+                            MC[:d,T],
+                            k, SP, MC)
 end

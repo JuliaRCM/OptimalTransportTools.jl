@@ -1,7 +1,7 @@
 mutable struct SinkhornParameters
     L::Int
-    ε::Real
-    tol::Real
+    ε::Float64
+    tol::Float64
 
     averaged_updates::Bool
     debias::Bool
