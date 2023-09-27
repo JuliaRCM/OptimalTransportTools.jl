@@ -30,6 +30,13 @@ function sinkhorn_dvg_sep(α::AbstractArray{T}, β::AbstractArray{V},
                             k, SP, MC
                             ) where {T, V}
 
+    k_min = deepcopy(k)
+
+    ρ = 0.5
+
+    ε_min = SP.ε
+    ε_l = 1.0
+
     MC[:α,V] .= ForwardDiff.value.(α) 
     MC[:β,V] .= β
 
@@ -40,8 +47,17 @@ function sinkhorn_dvg_sep(α::AbstractArray{T}, β::AbstractArray{V},
         MC[:dα,V] .= dα₀
         MC[:dβ,V] .= dβ₀
     end
-   
+
     for l in 1:SP.L
+
+        if l != 1
+            ε_l = maximum( (ε_min, ε_l * ρ) )
+        end
+        #if ε_l != ε_min
+            for i in eachindex(k)
+                k[i] .= k_min[i].^(ε_min/ε_l)
+            end
+        #end
 
         if SP.averaged_updates
             # f = 0.5 * f + 0.5 * SoftMin_β [ Cyx - g ]
@@ -51,10 +67,9 @@ function sinkhorn_dvg_sep(α::AbstractArray{T}, β::AbstractArray{V},
             # g = 0.5 * g + 0.5 * SoftMin_α [ Cxy - f ]
             MC[:αa,V] .= MC[:a,V] .* MC[:α,V]
             apply_K_sep!(MC[:t3,V], MC[:αa,V], k, MC[:t1,V])
-            
+
             MC[:a,V] .= sqrt.(MC[:a,V] ./ MC[:t2,V])
             MC[:b,V] .= sqrt.(MC[:b,V] ./ MC[:t3,V])
-
         else
             MC[:βb,V] .= MC[:b,V] .* MC[:β,V] 
             apply_K_sep!(MC[:t2,V], MC[:βb,V], k, MC[:t1,V])
@@ -76,17 +91,22 @@ function sinkhorn_dvg_sep(α::AbstractArray{T}, β::AbstractArray{V},
         end
 
         # Check for convergence every 4 iterations
-        if l % 4 == 0
+        if l % 4 == 0 && ε_l == ε_min
             # updated b last, so check for marginal violation on a:
             MC[:βb,V] .= MC[:b,V] .* MC[:β,V] 
             apply_K_sep!(MC[:t2,V], MC[:βb,V], k, MC[:t1,V])
             MC[:t2,V] .*= MC[:α,V] .* MC[:a,V]
             MC[:t2,V] .-= MC[:α,V]
 
-            # println("norm in iteration $l: $(norm( MC[:t2,V] , 1))")
-
             if norm( MC[:t2,V] , 1) < SP.tol
+                k .= k_min
+                #println("break at $l")
                 break # Sinkhorn loop
+            end
+
+            if l == SP.L
+                k .= k_min
+                #println("max iterations")
             end
         end
 
@@ -94,12 +114,12 @@ function sinkhorn_dvg_sep(α::AbstractArray{T}, β::AbstractArray{V},
 
     if SP.debias
         for i in eachindex(MC[:t2,T])
-                MC[:t2,T][i] = ( α[i] * (log( MC[:a,V][i] ) - log( MC[:dα,V][i] )) 
-                                + β[i] * (log( MC[:b,V][i] ) - log( MC[:dβ,V][i] )) )
+            MC[:t2,T][i] = ( α[i] * (log( MC[:a,V][i] ) - log( MC[:dα,V][i] )) 
+                            + β[i] * (log( MC[:b,V][i] ) - log( MC[:dβ,V][i] )) )
         end
     else
         for i in eachindex(MC[:t2,T])
-                MC[:t2,T][i] = α[i] * log( MC[:a,V][i] ) + β[i] * log( MC[:b,V][i] )
+            MC[:t2,T][i] = α[i] * log( MC[:a,V][i] ) + β[i] * log( MC[:b,V][i] )
         end
     end
 
@@ -113,7 +133,7 @@ function sinkhorn_dvg_sep(α::AbstractArray{T}, β::AbstractArray{V},
             dβ₀ .= MC[:dβ,V]
         end
     end
-    
+
     return S_ε
 end
 
@@ -178,14 +198,20 @@ function sinkhorn_barycenter_loop!(μ, λ::AbstractVector{T}, α, k, SP, MC) whe
     end
 end
 
-
 function sinkhorn_barycenter_sep(λ::AbstractVector{T}, α::AbstractVector{AT},
-                                a_₀, d₀,
-                                k, SP, MC
-                                ) where {T, V, AT <: AbstractArray{V}}
+                                    a_₀, d₀,
+                                    k, SP, MC
+                                    ) where {T, V, AT <: AbstractArray{V}}
 
     S = length(λ)
     μ = zeros(T, MC.n, MC.n)
+
+    k_min = deepcopy(k)
+
+    ρ = 0.5
+
+    ε_min = SP.ε
+    ε_l = 1.0
 
     # d = exp h / ε
 
@@ -199,10 +225,20 @@ function sinkhorn_barycenter_sep(λ::AbstractVector{T}, α::AbstractVector{AT},
 
     # Sinkhorn loop
     for l in 1:SP.L
+
+        if l != 1
+            ε_l = maximum( (ε_min, ε_l * ρ) )
+        end
+        #if ε_l != ε_min
+            for i in eachindex(k)
+                k[i] .= k_min[i].^(ε_min/ε_l)
+            end
+        #end
+
         sinkhorn_barycenter_loop!(μ, λ, α, k, SP, MC)
 
         # Check for convergence every 4 iterations
-        if l % 4 == 0
+        if l % 4 == 0 && ε_l == ε_min
             sum_norm = zero(V)
             # updated aₖ last, so check for marginal violation on bₖ:
             for s in 1:S
@@ -213,15 +249,22 @@ function sinkhorn_barycenter_sep(λ::AbstractVector{T}, α::AbstractVector{AT},
 
                 MC[:t2,V] .= ForwardDiff.value.(MC[:t2,T])
                 sum_norm += norm(MC[:t2,V], 1)
-            end
+                end
 
-            # println("norm in iteration $l: $(sum_norm/S)")
+                # println("norm in iteration $l: $(sum_norm/S)")
 
-            if sum_norm < SP.tol * S
-                break # Sinkhorn loop
+                if sum_norm < SP.tol * S
+                    #println("break at $l")
+                    k .= k_min
+                    break # Sinkhorn loop
+                end
+
+                if l == SP.L
+                    k .= k_min
+                    #println("max iterations")
+                end
             end
         end
-    end
 
     if SP.update_potentials
 
