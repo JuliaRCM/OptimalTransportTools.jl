@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = WassersteinDictionaries
+CurrentModule = OptimalTransportTools
 ```
 
-# WassersteinDictionaries
+# OptimalTransportTools
 
-Documentation for [WassersteinDictionaries](https://github.com/JuliaRCM/WassersteinDictionaries.jl).
+Documentation for [OptimalTransportTools](https://github.com/JuliaRCM/OptimalTransportTools.jl).
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [WassersteinDictionaries]
+Modules = [OptimalTransportTools]
 ```

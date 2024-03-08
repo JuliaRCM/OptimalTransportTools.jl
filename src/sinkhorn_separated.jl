@@ -15,7 +15,7 @@ end
 
 
 """
-wasserstein_distance_separated(p, β, a₀, b₀, d₁₀, d₂₀, k, SP, caches)
+sinkhorn_dvg_sep(p, β, a₀, b₀, d₁₀, d₂₀, k, SP, caches)
 p: right marginal as nxn matrix
 β: left marginal as nxn matrix
 k: e^(c/ε) with cost c as dx(nxn) vector of matrices

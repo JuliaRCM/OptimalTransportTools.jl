@@ -1,16 +1,16 @@
-using WassersteinDictionaries
+using OptimalTransportTools
 using Documenter
 
-DocMeta.setdocmeta!(WassersteinDictionaries, :DocTestSetup, :(using WassersteinDictionaries); recursive=true)
+DocMeta.setdocmeta!(OptimalTransportTools, :DocTestSetup, :(using OptimalTransportTools); recursive=true)
 
 makedocs(;
-    modules=[WassersteinDictionaries],
+    modules=[OptimalTransportTools],
     authors="Tobias M. Blickhan, Michael Kraus",
-    repo="https://github.com/JuliaRCM/WassersteinDictionaries.jl/blob/{commit}{path}#{line}",
-    sitename="WassersteinDictionaries.jl",
+    repo="https://github.com/JuliaRCM/OptimalTransportTools.jl/blob/{commit}{path}#{line}",
+    sitename="OptimalTransportTools.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://JuliaRCM.github.io/WassersteinDictionaries.jl",
+        canonical="https://JuliaRCM.github.io/OptimalTransportTools.jl",
         assets=String[],
     ),
     pages=[
@@ -19,6 +19,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/JuliaRCM/WassersteinDictionaries.jl",
+    repo="github.com/JuliaRCM/OptimalTransportTools.jl",
     devbranch="main",
 )

@@ -24,6 +24,6 @@ jobs:
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest
-            using WassersteinDictionaries
-            DocMeta.setdocmeta!(WassersteinDictionaries, :DocTestSetup, :(using WassersteinDictionaries); recursive=true)
-            doctest(WassersteinDictionaries)'
+            using OptimalTransportTools
+            DocMeta.setdocmeta!(OptimalTransportTools, :DocTestSetup, :(using OptimalTransportTools); recursive=true)
+            doctest(OptimalTransportTools)'
