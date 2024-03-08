@@ -1,4 +1,4 @@
-module WassersteinDictionaries
+module OptimalTransportTools
 
 using ForwardDiff
 using LinearAlgebra
