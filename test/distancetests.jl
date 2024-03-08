@@ -1,7 +1,3 @@
-using LinearAlgebra: norm
-using WassersteinDictionaries
-using Test
-
 const d = 2     # dimension
 const n = 64    # grid size
 
@@ -15,7 +11,7 @@ h₂ = 1/n
 
 S = 4           # number of distributions
 
-c = WassersteinDictionaries.get_cost_matrix_separated(x, y, d)  # cost
+c = OptimalTransportTools.get_cost_matrix_separated(x, y, d)  # cost
 
 α = [zeros(n,n) for _ in 1:S]  # input histograms
 μ₀ₑ = zeros(n,n)               # exact barycenter
@@ -55,7 +51,7 @@ end
 log_α = [ log.(α[s]) for s in 1:S ];
 
 ε = 5e-3
-k = WassersteinDictionaries.get_gibbs_matrix(c, ε)
+k = OptimalTransportTools.get_gibbs_matrix(c, ε)
 
 SP = SinkhornParameters(Int(ceil(1/ε)), ε)
 SPB = SinkhornParameters(Int(ceil(1/ε)), ε)

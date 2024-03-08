@@ -1,6 +1,7 @@
-using WassersteinDictionaries
+using OptimalTransportTools
 using Test
+using LinearAlgebra: norm
 
-@testset "WassersteinDictionaries.jl" begin
+@testset "OptimalTransportTools.jl" begin
     include("distancetests.jl")
 end
