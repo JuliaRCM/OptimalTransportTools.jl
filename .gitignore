@@ -32,9 +32,17 @@ Manifest.toml
 
 # Notebooks
 notebooks
+*.ipynb
 
 # Deprecated
 deprecated
 
 # Figures
 figs/
+
+# Data
+data
+
+# Code Workspace
+.vscode
+*.code-workspace
